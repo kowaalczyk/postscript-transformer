@@ -118,11 +118,3 @@ module Lib where
     transform tr (Picture lines) = Picture (map trline lines) where
         trline :: Line -> Line
         trline (Line start stroke) = Line (trpoint tr start) (trvec tr stroke)
-    
-
--- module Lib
---     ( someFunc
---     ) where
-
--- someFunc :: IO ()
--- someFunc = putStrLn "someFunc"
