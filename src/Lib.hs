@@ -85,17 +85,22 @@ module Lib where
             compress csteps (next:rest) = compress (csteps++[next]) rest
             compress csteps [] = csteps
     
+    toRadians :: Angle -> Float
+    toRadians (Angle deg) = 2*pi*(fromRational deg)/(fromRational fullCircle)
+
+    rotateX :: R -> R -> Float -> R
+    rotateX x y radians = x*(toRational $ cos radians) - y*(toRational $ sin radians)
+
+    rotateY :: R -> R -> Float -> R
+    rotateY x y radians = y*(toRational $ cos radians) + x*(toRational $ sin radians)
+
     applyAngle :: Angle -> Point -> Point
-    applyAngle (Angle deg) (Point x y) = Point newX newY where
-        newX = x*(toRational $ cos radians) - y*(toRational $ sin radians)
-        newY = y*(toRational $ cos radians) + x*(toRational $ sin radians)
-        radians = 2*pi*(fromRational deg)/(fromRational fullCircle)
+    applyAngle angle (Point x y) = Point (rotateX x y rad) (rotateY x y rad) where
+        rad = toRadians angle
     
-    applyAngleVec :: Angle -> Vec -> Vec  -- TODO: DRY
-    applyAngleVec (Angle deg) (Vec x y) = Vec newX newY where
-        newX = x*(toRational $ cos radians) - y*(toRational $ sin radians)
-        newY = y*(toRational $ cos radians) + x*(toRational $ sin radians)
-        radians = 2*pi*(fromRational deg)/(fromRational fullCircle)
+    applyAngleVec :: Angle -> Vec -> Vec
+    applyAngleVec angle (Vec x y) = Vec (rotateX x y rad) (rotateY x y rad) where
+        rad = toRadians angle
     
     applyVector :: Vec -> Point -> Point
     applyVector (Vec xv yv) (Point x y) = Point (x+xv) (y+yv)
