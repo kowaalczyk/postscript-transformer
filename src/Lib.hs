@@ -22,6 +22,10 @@ module Lib where
     data Line = Line { start::Point, stroke::Vec } deriving (Show, Eq)
 
     data Picture = Picture { lines::[Line] } deriving (Show, Eq)
+
+    emptyPicture :: Picture
+    emptyPicture = Picture []
+
     -- odcinek pomiędzy punktami o podanych współrzędnych
     line :: (R,R) -> (R,R) -> Picture
     line (x1,y1) (x2,y2) = Picture [Line (Point x1 y1) (Vec (x2-x1) (y2-y1))]
