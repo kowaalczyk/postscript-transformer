@@ -11,32 +11,44 @@ module Main where
         currPoint :: Maybe R2,
         basePoint :: Maybe R2,
         currPicture :: Picture
-    }
+    } deriving (Show, Eq)
     initState = ParserState [] Nothing Nothing (Picture [])
+
+    stackSize :: ParserState -> Int
+    stackSize state = length . stack $ state
 
     readR :: String -> R
     readR str = toRational n where
         n = read str :: Integer
 
     applyOp :: (R->R->R) -> ParserState -> ParserState
-    applyOp op (ParserState (a:b:rest) cp bp pic) = ParserState ((op b a):rest) cp bp pic
-    
-    push :: R -> ParserState -> ParserState
-    push n (ParserState stack cp bp pic) = ParserState (n:stack) cp bp pic
-    
-    moveTo :: ParserState -> ParserState
-    moveTo (ParserState (a:b:rest) cp bp pic) = ParserState rest (Just (b,a)) (Just (b,a)) pic
-    moveTo state = state  -- TODO: Error handling
-    
-    lineTo :: ParserState -> ParserState
-    lineTo (ParserState (a:b:rest) (Just cp) bp pic) = ParserState rest (Just (b,a)) bp (pic & line cp (b,a))
-    lineTo state = state  -- TODO: Error handling
-    
-    closePath :: ParserState -> ParserState
-    closePath (ParserState stack (Just cp) (Just bp) pic) = ParserState stack (Just bp) (Just bp) (pic & line cp bp)
-    closePath state = state  -- by reqirement, closePath defaults to identity instead of error
+    applyOp op state = case stack state of
+        (a:b:rest) -> state { stack=((op b a):rest) }
+        otherwise -> state -- TODO: Error handling
 
-    parseWord :: String -> ParserState -> ParserState
+    push :: R -> ParserState -> ParserState
+    push n state = state { stack=(n:prevStack) } where
+        prevStack = stack state
+
+    moveTo :: ParserState -> ParserState
+    moveTo state = case stack state of
+        (a:b:rest) -> state { stack=rest, currPoint=(Just (b,a)), basePoint=(Just (b,a)) }
+        otherwise -> state -- TODO: Error handling
+
+    lineTo :: ParserState -> ParserState
+    lineTo state = case stack state of
+        (a:b:rest) -> state { stack=rest, currPoint=(Just (b,a)), currPicture=(pic & line cp (b,a))} where
+            (Just cp) = currPoint state -- TODO: Error handling
+            pic = currPicture state
+        otherwise -> state -- TODO: Error handling
+
+    closePath :: ParserState -> ParserState
+    closePath state = case currPoint state of
+        (Just cp) -> state { currPoint=(Just bp), currPicture=(pic & line cp bp) } where
+            (Just bp) = basePoint state  -- Just cp => Just bp
+            pic = currPicture state
+        Nothing -> state  -- unlike lineTo, this is not an error by design
+
     parseWord word state = case word of
         "add" -> applyOp (+) state
         "sub" -> applyOp (-) state
@@ -49,11 +61,11 @@ module Main where
 
     parseInput :: [String] -> State ParserState Picture
     parseInput [] = do
-        (ParserState stack cp bp pic) <- get
-        return pic
+        state <- get
+        return (currPicture state)
     parseInput (word:words) = do
-        currentState <- get
-        let nextState = parseWord word currentState
+        state <- get
+        let nextState = parseWord word state
         put nextState
         parseInput words
 

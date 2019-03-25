@@ -4,8 +4,8 @@ module Mon where
 infixl 5 ><
 
 class Mon m where
-  m1 :: m
-  (><) :: m -> m -> m
+    m1 :: m
+    (><) :: m -> m -> m
 
 -- ** Properties:
 -- * leftUnit x = m1 >< x == x
