@@ -8,15 +8,14 @@ module Main where
     import Lib
 
     data ParserState = ParserState {
-        stack :: [R],  -- Contains loaded variables
-        currPoint :: Maybe R2,  -- Last point of current shape
-        basePoint :: Maybe R2,  -- Starting point of current shape
-        currPicture :: Picture,  -- Part of picture that is waiting for current tranfromation
-        finPicture :: Picture,  -- Part of picture that is already transformed
-        currTransform :: Transform,  -- Transformations that will be applied to current picture
-        inTransform :: Bool  -- True only if last command was a transform
+        stack :: [R],  -- Stack for loaded variables
+        bpt :: Maybe Point,  -- Base point of current path
+        cpt :: Maybe Point,  -- Current point of current path
+        clen :: Maybe Int,  -- Length of current path (in points)
+        cpic :: Picture,  -- Current picture (including current path)
+        ctr :: Transform  -- Current transform (applied to all following points)
     } deriving (Show, Eq)
-    initState = ParserState [] Nothing Nothing emptyPicture emptyPicture (Transform []) True
+    initState = ParserState [] Nothing Nothing Nothing picture (m1::Transform)
 
     stackSize :: ParserState -> Int
     stackSize state = length . stack $ state
@@ -36,62 +35,58 @@ module Main where
 
     applyMoveTo :: ParserState -> ParserState
     applyMoveTo state = case stack state of
-        (a:b:rest) -> state { stack=rest, currPoint=(Just (b,a)), basePoint=(Just (b,a)) }
-        otherwise -> state -- TODO: Error handling
+        (a:b:rest) -> state { stack=rest, cpt=newBase, clen=(Just 0), bpt=newBase } where -- TODO: Error handling
+            newBase = Just $ point (b,a)
+        otherwise -> state
 
     applyLineTo :: ParserState -> ParserState
     applyLineTo state = case stack state of
-        (a:b:rest) -> state { stack=rest, currPoint=(Just (b,a)), currPicture=(pic & line cp (b,a))} where
-            (Just cp) = currPoint state -- TODO: Error handling
-            pic = currPicture state
+        (a:b:rest) -> state { stack=rest, cpt=(Just newPoint), clen=(Just newLen), cpic=newPic } where
+            newLen = oldLen + 1
+            newPoint = trpoint (ctr state) (point (b,a))
+            newPic = (cpic state) & line (xy oldPoint) (xy newPoint)
+            Just oldLen = clen state -- TODO: Error handling
+            (Just oldPoint) = cpt state -- TODO: Error handling
         otherwise -> state -- TODO: Error handling
 
     applyClosePath :: ParserState -> ParserState
-    applyClosePath state = case currPoint state of
-        (Just cp) -> state { currPoint=(Just bp), currPicture=(pic & line cp bp) } where
-            (Just bp) = basePoint state  -- Just cp => Just bp
-            pic = currPicture state
-        Nothing -> state  -- unlike lineTo, this is not an error by design
+    applyClosePath state = case clen state <= Just 1 of
+        True -> state  -- unlike lineTo, this is not an error by design
+        False -> state { cpt=(Just newPoint), clen=(Just newLen), cpic=newPic } where
+            newLen = oldLen + 1
+            newPic = (cpic state) & line (xy oldPoint) (xy newPoint)
+            (Just newPoint) = bpt state -- clen >= 2 ==> bpt is not Nothing
+            (Just oldPoint) = cpt state -- clen >= 2 ==> cpt is not Nothing
+            Just oldLen = clen state -- exists, and >= 2 by case definition
 
     applyRotate :: ParserState -> ParserState
     applyRotate state = case stack state of
-        (a:rest) -> state { stack=rest, currTransform=(ct >< rotate a) } where
-            ct = currTransform state
+        (a:rest) -> state { stack=rest, ctr=newTransform } where
+            newTransform = rotate a >< ctr state
         otherwise -> state -- TODO: Error handling
 
     applyTranslate :: ParserState -> ParserState
     applyTranslate state = case stack state of
-        (a:b:rest) -> state { stack=rest, currTransform=(ct >< (translate (vec (b,a)))) } where
-            ct = currTransform state
+        (a:b:rest) -> state { stack=rest, ctr=newTransform } where
+            newTransform = translate (vec (b,a)) >< ctr state
         otherwise -> state -- TODO: Error handling
-
-    toTransform :: ParserState -> ParserState
-    toTransform state = case inTransform state of
-        True -> state
-        False -> state { finPicture=(fp & transform ct cp), currPicture=emptyPicture, inTransform=True } where
-            ct = currTransform state
-            cp = currPicture state
-            fp = finPicture state
-
-    fromTransform :: ParserState -> ParserState
-    fromTransform state = state { inTransform=False }
 
     parseWord word state = case word of
         "add" -> applyOp (+) state
         "sub" -> applyOp (-) state
         "mul" -> applyOp (*) state
         "div" -> applyOp (/) state  -- TODO: Div error handling
-        "moveto" -> applyMoveTo . fromTransform $ state
-        "lineto" -> applyLineTo . fromTransform $ state
-        "closepath" -> applyClosePath . fromTransform $ state
-        "rotate" -> applyRotate . toTransform $ state
-        "translate" -> applyTranslate . toTransform $ state
+        "moveto" -> applyMoveTo state
+        "lineto" -> applyLineTo state
+        "closepath" -> applyClosePath state
+        "rotate" -> applyRotate state
+        "translate" -> applyTranslate state
         otherwise -> applyPush (readR word) state  -- TODO: read parse error
 
     parseInput :: [String] -> State ParserState Picture
     parseInput [] = do
         state <- get
-        return (finPicture . toTransform $ state)
+        return $ cpic state
     parseInput (word:words) = do
         state <- get
         let nextState = parseWord word state
@@ -109,5 +104,5 @@ module Main where
         let n = read $ head args :: Int
         input <- getContents
         putStrLn "300 400 translate"
-        print $ showRendering $ renderScaled n $ evalState (parseInput . words $ input) initState
+        putStrLn $ showRendering $ renderScaled n $ evalState (parseInput . words $ input) initState
         putStrLn "stroke showpage"
