@@ -103,7 +103,7 @@ module Main where
             (Left e) -> throwError e
 
     postprocess :: Int -> Either String Picture -> String
-    -- printing exceptions for debugging purposes can be enabled here by using:
+    -- enable printing exceptions for debugging purposes here:
     -- postprocess _ (Left e) = e
     postprocess _ (Left _) = "/Courier findfont 24 scalefont setfont 0 0 moveto (Error) show"
     postprocess picScale (Right pic) = showRendering $ renderScaled picScale pic where
@@ -114,9 +114,12 @@ module Main where
 
     main :: IO()
     main = do
-        args <- getArgs  -- TODO: Args error handling
-        let n = read $ head args :: Int
-        input <- getContents
-        putStrLn "300 400 translate"
-        putStrLn $ postprocess n (runExcept (evalStateT (parseInput . words $ input) initState))
-        putStrLn "stroke showpage"
+        args <- getArgs
+        case (args, readMaybe $ head args :: Maybe Int) of
+            (a:as, Just n) -> do
+                input <- getContents
+                putStrLn "300 400 translate"
+                putStrLn $ postprocess n (runExcept (evalStateT (parseInput . words $ input) initState))
+                putStrLn "stroke showpage"
+            otherwise -> do
+                putStrLn "Missing positional argument N::Int - scaling factor for the rendered picture"
