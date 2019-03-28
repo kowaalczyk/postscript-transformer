@@ -1,3 +1,4 @@
+-- © Krzysztof Kowalczyk kk385830@students.mimuw.edu.pl
 module Main where
     import System.Environment (getArgs)
     import System.IO (putStrLn, getContents)
@@ -19,9 +20,6 @@ module Main where
     } deriving (Show, Eq)
     initState = ParserState [] Nothing Nothing Nothing picture (m1::Transform)
 
-    stackSize :: ParserState -> Int
-    stackSize state = length . stack $ state
-
     applyOp :: (R->R->R) -> ParserState -> Except String ParserState
     applyOp op state = case stack state of
         (a:b:rest) -> return state { stack=((op b a):rest) }
@@ -29,7 +27,7 @@ module Main where
 
     applyDiv :: ParserState -> Except String ParserState
     applyDiv state = case stack state of
-        (a:0:rest) -> throwError "DivideByZero"
+        (0:b:rest) -> throwError "DivideByZero"
         (a:b:rest) -> return state { stack=((b / a):rest) }
         otherwise -> throwError "StackTooSmall"
 
@@ -42,13 +40,13 @@ module Main where
     applyMoveTo :: ParserState -> Except String ParserState
     applyMoveTo state = case stack state of
         (a:b:rest) -> return state { stack=rest, cpt=newBase, clen=(Just 0), bpt=newBase } where
-            newBase = Just $ point (b,a)
+            newBase = Just $ trpoint (ctr state) (point (b,a))
         otherwise -> throwError "StackTooSmall"
 
     applyLineTo :: ParserState -> Except String ParserState
     applyLineTo state = case (clen state, stack state) of
         (Nothing,_) -> throwError "NoStartingPoint"
-        (_,(a:b:rest)) -> return state { stack=rest, cpt=(Just newPoint), clen=(Just newLen), cpic=newPic } where
+        (Just _,(a:b:rest)) -> return state { stack=rest, cpt=(Just newPoint), clen=(Just newLen), cpic=newPic } where
             newLen = oldLen + 1
             newPoint = trpoint (ctr state) (point (b,a))
             newPic = (cpic state) & line (xy oldPoint) (xy newPoint)
@@ -105,7 +103,9 @@ module Main where
             (Left e) -> throwError e
 
     postprocess :: Int -> Either String Picture -> String
-    postprocess _ (Left e) = e
+    -- printing exceptions for debugging purposes can be enabled here by using:
+    -- postprocess _ (Left e) = e
+    postprocess _ (Left _) = "/Courier findfont 24 scalefont setfont 0 0 moveto (Error) show"
     postprocess picScale (Right pic) = showRendering $ renderScaled picScale pic where
         showRendering :: IntRendering -> String
         showRendering rendering = unlines $ map showLine rendering
@@ -114,7 +114,7 @@ module Main where
 
     main :: IO()
     main = do
-        args <- getArgs
+        args <- getArgs  -- TODO: Args error handling
         let n = read $ head args :: Int
         input <- getContents
         putStrLn "300 400 translate"

@@ -3,3 +3,7 @@ postscript-transformer.cabal
 *~
 .idea/
 out
+examples/
+radekw_tests/
+my_tests/
+testlog.txt

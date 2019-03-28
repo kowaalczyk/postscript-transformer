@@ -1,5 +1,5 @@
+-- © Krzysztof Kowalczyk kk385830@students.mimuw.edu.pl
 module Lib where
-
     import Data.List
     import Mon
 
@@ -10,10 +10,10 @@ module Lib where
     data Point = Point { xy::R2 } deriving (Show, Eq)
 
     point :: R2 -> Point
-    point=Point
+    point xy = Point xy
 
     vec :: R2 -> Vec
-    vec=Vec
+    vec vxy =Vec vxy
 
     instance Mon Vec where
         m1 = vec (0,0)
@@ -39,7 +39,7 @@ module Lib where
 
     -- suma (nałożenie) dwóch rysunków
     (&) :: Picture -> Picture -> Picture
-    (&) (Picture list1) (Picture list2) = Picture $ nub list1 ++ list2
+    (&) (Picture list1) (Picture list2) = Picture $ nub (list1 ++ list2)
 
     type IntLine = ((Int,Int), (Int,Int))
     type IntRendering = [IntLine]
@@ -81,45 +81,42 @@ module Lib where
 
     instance Mon Transform where
         m1 = Transform []
-        (><) (Transform t1) (Transform t2) = Transform (compress [] (t1++t2)) where
+        (><) (Transform t1) (Transform t2) = Transform $ compress [] (t1++t2) where
             compress :: [TransformStep] -> [TransformStep] -> [TransformStep]
-            compress csteps ((Rotation a1):(Rotation a2):rest) = compress (csteps ++ [Rotation (a1 >< a2)]) rest
-            compress csteps ((Translation v1):(Translation v2):rest) = compress (csteps ++ [Translation (v1 >< v2)]) rest
+            compress csteps ((Rotation r1):(Rotation r2):rest) = compress (csteps++[Rotation $ r1 >< r2]) rest
+            compress csteps ((Translation v1):(Translation v2):rest) = compress (csteps++[Translation $ v1 >< v2]) rest
             compress csteps (next:rest) = compress (csteps++[next]) rest
             compress csteps [] = csteps
 
+    rsin :: R -> R
+    rsin r  -- Bhaskara I's sine approximation formula for rational numbers
+        | 0 <= r && r <= 180 = 4*r*(180-r) / (40500 - r*(180-r))
+        | r < 0 = - rsin (r+180)
+        | otherwise = - rsin (r-180)
+
+    rcos :: R -> R
+    rcos r = rsin (r+90)
+
     rotateR2 :: Angle -> R2 -> R2
-    rotateR2 ang (x,y) = (rotateX x y rad, rotateY x y rad) where
-        rad = toRadians ang
-        toRadians :: Angle -> Float
-        toRadians (Angle deg) = 2*pi*(fromRational deg)/(fromRational fullCircle)
-        rotateX :: R -> R -> Float -> R
-        rotateX x y radians = x*(toRational $ cos radians) - y*(toRational $ sin radians)
-        rotateY :: R -> R -> Float -> R
-        rotateY x y radians = y*(toRational $ cos radians) + x*(toRational $ sin radians)
-
-    applyAngle :: Angle -> Point -> Point
-    applyAngle ang pt = point $ rotateR2 ang (xy pt)
-
-    applyAngleVec :: Angle -> Vec -> Vec
-    applyAngleVec ang v = vec $ rotateR2 ang (vxy v)
-
-    applyVector :: Vec -> Point -> Point
-    applyVector (Vec (xv,yv)) (Point (x,y)) = Point (x+xv,y+yv)
+    rotateR2 (Angle deg) (x,y) = (rotateX x y deg, rotateY x y deg) where
+        rotateX :: R -> R -> R -> R
+        rotateX x y deg = x*(rcos deg) - y*(rsin deg)
+        rotateY :: R -> R -> R -> R
+        rotateY x y deg = y*(rcos deg) + x*(rsin deg)
 
     trpoint :: Transform -> Point -> Point
-    trpoint (Transform steps) pt = fst $ foldl applyStep (pt, angle 0) steps where
-        -- applyStep caches current, precise angle to limit floating point error
-        applyStep :: (Point,Angle) -> TransformStep -> (Point,Angle)
-        applyStep (pt,r) (Translation vec) = (applyVector vec pt,r)
-        applyStep (pt,angle1) (Rotation angle2) = (applyAngle (angle1 >< angle2) pt, angle1 >< angle2)
+    trpoint (Transform steps) pt = foldl applyStep pt steps where
+        applyStep :: Point -> TransformStep -> Point
+        applyStep pt (Translation v) = applyVector v pt
+        applyStep pt (Rotation ang) = point $ rotateR2 ang (xy pt)
+        applyVector :: Vec -> Point -> Point
+        applyVector (Vec (xv,yv)) (Point (x,y)) = point (x+xv,y+yv)
 
     trvec :: Transform -> Vec -> Vec
-    trvec (Transform steps) vec = fst $ foldl applyStep (vec, angle 0) steps where
-        -- applyStep caches current, precise angle to limit floating point error
-        applyStep :: (Vec,Angle) -> TransformStep -> (Vec,Angle)
-        applyStep (vec,angle1) (Rotation angle2) = (applyAngleVec (angle1 >< angle2) vec, angle1 >< angle2)
-        applyStep (vec,r) (Translation _) = (vec,r)
+    trvec (Transform steps) v = foldl applyStep v steps where
+        applyStep :: Vec -> TransformStep -> Vec
+        applyStep v (Rotation ang) = vec $ rotateR2 ang (vxy v)
+        applyStep v (Translation _) = v
 
     transform :: Transform -> Picture -> Picture
     transform tr (Picture lines) = Picture (map trline lines) where
